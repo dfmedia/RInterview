@@ -1,0 +1,209 @@
+---
+title: "Quantum Assessment - Response"
+author: "Lucas Stephens"
+date: "3/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Load Packages
+
+```{r cars}
+library(tidyverse)
+library(ggplot2)
+library(lpSolve)
+```
+
+# The Advertising Problem
+
+You are running an advertising campaign with Facebook and have data available to make decisions about the allocation of your budget. You are tasked to allocate $500 dollars of budget among three advertisments which have historical performance data by writing a linear program. 
+
+Data Available from February.
+
++ $s_n$ - Dollars spent for advertisements in the prior month for advertisement $n$. Called `amount_spent`.
++ $i_n$ - Impressions obtained with $s$ dollars in the prior month for advertisement $n$. Called `impressions_obtained`.
++ $c_n$ - Clicks obtained with $s$ dollars in the prior month for advertisement $n$. Called `clicks_obtained`.
++ $k_n$ - The Key Performance Indicator: $\frac{i_n}{s_n}$ 
++ $x_n$ - Budgets for the new month. Your decision variables.
+
+You have 500 dollars to spend this month and three advertisments, while maximizing impressions. The budget allocated to each advertisement is $x_1...x_3$ respectively. 
+
+$$
+\begin{align}
+max\;\;\;\;\;\;                &  x^T k\\
+s.t.\;\;\;\;\;\;               & \:\: \\
+                               & \sum_{i=1}^n x_i = 500 \\
+                               & x_i >= 25 \:\; \forall\;\;i\\
+                               & x_1 - x_2 >= 0 \\
+                               & x_3 + x_2 <= 400
+\end{align}
+$$
+The data below is available for your decision making. 
+
+```{r, message=FALSE, warning=FALSE}
+advertisement_data <- tibble(
+  advertisement_name   = paste0("Advertisement: ", 1:3),
+  amount_spent         = c(100, 125, 200),
+  impressions_obtained = c(1000, 1530, 105),
+  clicks_obtained      = c(250, 350, 600)
+)
+
+advertisement_data
+```
+
+### Objective Function:
+
+The key performance indicator is defined as: $\frac{i_n}{s_n}$ - impressions per dollar. The historical KPIs for each campaign are the coefficients of the objective function. 
+
+```{r}
+advertisement_data <-  
+  advertisement_data %>% mutate(
+    impressions_per_dollar = impressions_obtained/amount_spent
+  )
+
+obj_func = advertisement_data$impressions_per_dollar
+obj_func
+```
+
+### Constraints:
+
+**Constraint 1:** 
+
+$\sum_{i=1}^n x_i = 500$
+
+Total budget allocated must be $500.
+
+```{r}
+constraint_1 = matrix(c(1,1,1), ncol=3)
+dir_1 = "="
+rhs_1 = 500
+```
+
+**Constraint 2:**
+
+$x_i >= 25 \:\; \forall\;\;i$
+
+Each individual budget needs to be at least $25.
+
+```{r}
+constraint_2 = diag(1, nrow=3)
+dir_2 = rep(">=",3)
+rhs_2 = rep(25,3)
+```
+
+**Constraint 3:**
+
+$x_1 - x_2 >= 0$
+
+Campaign 1's budget needs to always be bigger than or equal to Campaign 2's budget.
+
+```{r}
+constraint_3 = matrix(c(1,-1,0), ncol=3)
+dir_3 = ">="
+rhs_3 = 0
+```
+
+**Constraint 4:**
+
+$x_2 + x_3 <= 400$
+
+Total budget between Campaign 2 & 3 needs to be less than or equal to $400.
+
+```{r}
+constraint_4 = matrix(c(0,1,1), ncol = 3)
+dir_4 = "<="
+rhs_4 = 400
+```
+
+## Solve
+
+```{r}
+A = rbind(constraint_1, constraint_2, constraint_3, constraint_4)
+dir = c(dir_1, dir_2, dir_3, dir_4)
+b = c(rhs_1, rhs_2, rhs_3, rhs_4)
+
+solution = lp(direction = "max",
+              objective.in = obj_func,
+              const.mat = A,
+              const.dir = dir,
+              const.rhs = b)
+
+solution$solution
+```
+
+## Bonus 1
+
+**Constraint 5:**
+
+Expected clicks must be greater than 1350.
+
++ Clicks per dollar ($C_n$) = $c_n/s_n$
++ Expected Clicks ($E(C)$) = $\sum_{i=1}^n C_n*x_n$
+
+```{r}
+advertisement_data <- 
+  advertisement_data %>% mutate(
+    clicks_per_dollar = clicks_obtained/amount_spent
+  )
+
+advertisement_data$clicks_per_dollar
+```
+
+```{r}
+constraint_5 = matrix(advertisement_data$clicks_per_dollar, ncol = 3)
+dir_5 = ">"
+rhs_5 = 1350
+```
+
+## New solution:
+
+```{r}
+A = rbind(constraint_1, constraint_2, constraint_3, constraint_4, constraint_5)
+dir = c(dir_1, dir_2, dir_3, dir_4, dir_5)
+b = c(rhs_1, rhs_2, rhs_3, rhs_4, rhs_5)
+
+solution = lp(direction = "max",
+              objective.in = obj_func,
+              const.mat = A,
+              const.dir = dir,
+              const.rhs = b)
+
+solution$solution
+```
+
+## Bonus 2:
+
+**Constraint 6:**
+
+Campaign 3 must always receive at least 30% of the budget allocated to Campaigns 2 & 3. 
+
+$x_3 >= .3 (x_2 + x_3)$
+
+or otherwise:
+
+$0x_1 - 0.30x_2 + 0.70x_3 >= 0$
+
+```{r}
+constraint_6 = matrix(c(0,-.3,.7), ncol = 3)
+dir_6 = ">="
+rhs_6 = 0
+```
+
+## New, new solution:
+
+```{r}
+A = rbind(constraint_1, constraint_2, constraint_3, constraint_4, constraint_5, constraint_6)
+dir = c(dir_1, dir_2, dir_3, dir_4, dir_5, dir_6)
+b = c(rhs_1, rhs_2, rhs_3, rhs_4, rhs_5, rhs_6)
+
+solution = lp(direction = "max",
+              objective.in = obj_func,
+              const.mat = A,
+              const.dir = dir,
+              const.rhs = b)
+
+solution$solution
+```
