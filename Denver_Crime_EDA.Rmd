@@ -1,0 +1,239 @@
+---
+title: "Denver Crime Data - EDA"
+author: "Lucas Stephens"
+date: "3/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Import the data & load packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggmap)
+library(lubridate)
+
+df = read_csv(file='denver-crime-data/crime.csv.gz')
+```
+
+
+## Add some features
+
+```{r}
+df <- 
+  df %>% mutate(
+    local_first_occurrence_date = as.POSIXct(as.POSIXlt(df$FIRST_OCCURRENCE_DATE, tz="MST")),
+    day_of_week = wday(local_first_occurrence_date, label = TRUE), 
+    month = month(local_first_occurrence_date, label = TRUE),
+    date = date(local_first_occurrence_date), 
+    week = week(local_first_occurrence_date),
+    year = year(local_first_occurrence_date), 
+    minute = minute(local_first_occurrence_date), 
+    am = am(local_first_occurrence_date),
+    hour = hour(local_first_occurrence_date),
+    type = case_when(
+            IS_CRIME == 1 & IS_TRAFFIC == 0 ~ "Crime",
+            IS_CRIME == 0 & IS_TRAFFIC == 1 ~ "Traffic",
+            TRUE ~ "Both"
+        )
+      
+  )
+```
+
+## Set some colors
+
+```{r}
+col_vector<-c('#e6194b', 
+              '#3cb44b', 
+              '#ffe119', 
+              '#4363d8', 
+              '#f58231', 
+              '#911eb4', 
+              '#46f0f0', 
+              '#f032e6', 
+              '#bcf60c', 
+              '#fabebe', 
+              '#008080', 
+              '#800000', 
+              '#aaffc3', 
+              '#ffd8b1', 
+              '#000075', 
+              '#808080', 
+              '#000000')
+
+dfm_color = "#39848D"
+```
+
+
+
+```{r}
+daily_count <- 
+  df %>% count(date)
+
+ggplot(daily_count, aes(x=date, y=n)) + 
+  geom_line(color = dfm_color) + 
+  theme_bw() + 
+  labs(title = "Number of Incidents per Day",
+       x = element_blank(),
+       y = element_blank()) + 
+  scale_x_date(date_breaks = "year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r}
+df <- 
+  df %>% 
+  filter(local_first_occurrence_date >= date("2017-01-01") & local_first_occurrence_date < date("2019-03-01"))
+
+daily_count <- 
+  df %>% count(date)
+
+ggplot(daily_count, aes(x=date, y=n)) + 
+  geom_line(color = dfm_color) + 
+  theme_bw() + 
+  labs(title = "Number of Incidents per Day",
+       x = element_blank(),
+       y = element_blank()) + 
+  scale_x_date(date_breaks = "year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) 
+```
+
+```{r}
+daily_type_count <- 
+  df %>% 
+    mutate(
+    month_year = date(paste0(year(date), "-", month(date, label =  FALSE), "-", "01"))
+  ) %>% 
+  count(month_year, type)
+
+ggplot(daily_type_count, aes(x=month_year, y=n)) + 
+  geom_line(aes(color=type)) + 
+  theme_bw() + 
+  labs(title = "Number of Incidents per Month",
+       x = element_blank(),
+       y = element_blank(),
+       color = "Type") + 
+  scale_x_date(date_breaks = "year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(values = col_vector)
+```
+
+
+
+```{r}
+offense_daily_percentage <- 
+  df %>% 
+  mutate(
+    month_year = date(paste0(year(date), "-", month(date, label =  FALSE), "-", "01"))
+  ) %>% 
+  count(month_year, OFFENSE_CATEGORY_ID) %>% 
+  group_by(month_year) %>% 
+  mutate(
+    total = sum(n)
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    percentage = n/total
+  )
+
+ggplot(offense_daily_percentage, aes(x=month_year, y=percentage)) +
+  geom_area(aes(fill=OFFENSE_CATEGORY_ID)) +
+  theme_bw() + 
+  labs(title = "Incident Distribution per Month",
+       x = element_blank(),
+       y = element_blank(),
+       fill = "Offense Category") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_fill_manual(values=col_vector)
+```
+
+```{r fig.height=8, fig.width=12}
+monthly_offense_count <- 
+  df %>% 
+  count(month, year, OFFENSE_CATEGORY_ID)
+
+ggplot(monthly_offense_count, aes(x=month, y=n)) +
+  geom_line(aes(color=as.character(year), group=as.character(year))) + 
+  theme_bw() + 
+  labs(title = "Year over Year Incident Comparison",
+       x = element_blank(),
+       y = "# Incidents",
+       color = "Year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_color_manual(values = col_vector) + 
+  facet_wrap(~ OFFENSE_CATEGORY_ID, scales = "free_y") +
+  scale_x_discrete(breaks = c("Jan", "Mar", "May", "Jul", "Sep", "Nov"))
+```
+
+```{r fig.height=8, fig.width=12}
+offense_day_of_week <- 
+  df %>% 
+  count(day_of_week, OFFENSE_CATEGORY_ID, year)
+
+ggplot(offense_day_of_week, aes(x=day_of_week, y=as.numeric(n))) + 
+  geom_point(aes(color = as.factor(year))) + 
+  theme_bw() + 
+  labs(title = "Day-of-week Incident Comparison",
+       x = element_blank(),
+       y = "# Incidents",
+       color = "Year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_color_manual(values = col_vector) + 
+  facet_wrap(~ OFFENSE_CATEGORY_ID, scales = "free") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+
+```{r}
+heatmap1 <- 
+  df %>% 
+    count(DISTRICT_ID, OFFENSE_CATEGORY_ID)
+
+col1 = "#d8e1cf" 
+col2 = "#438484"
+
+ggplot(heatmap1, aes(x=DISTRICT_ID, y=OFFENSE_CATEGORY_ID)) +
+  geom_tile(aes(fill=n)) +
+  scale_fill_gradient(low = col1, high = col2) +
+  #facet_grid(OFFENSE_CATEGORY_ID ~ year) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+  scale_x_continuous(breaks = unique(heatmap1$DISTRICT_ID))
+```
+
+
+```{r}
+map = get_map(location = "Denver, CO",
+              source = "google",
+              maptype = "terrain",
+              crop = TRUE, 
+              zoom = 10)
+
+ggmap(map) +
+  labs(title = "Heat Map of Offenses",
+       x = element_blank(),
+       y = element_blank(),
+       fill = "Number of Incidents"
+  ) +
+  theme_bw() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  stat_density2d(data=df, mapping=aes(x=GEO_LON, y=GEO_LAT, fill=..level..), geom = "polygon") +
+  scale_fill_gradient(low="green", high="red")
+```
+

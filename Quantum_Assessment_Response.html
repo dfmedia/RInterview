@@ -300,15 +300,8 @@ solution$solution</code></pre>
     clicks_per_dollar = clicks_obtained/amount_spent
   )
 
-advertisement_data</code></pre>
-<pre><code>## # A tibble: 3 x 6
-##   advertisement_n… amount_spent impressions_obt… clicks_obtained
-##   &lt;chr&gt;                   &lt;dbl&gt;            &lt;dbl&gt;           &lt;dbl&gt;
-## 1 Advertisement: 1          100             1000             250
-## 2 Advertisement: 2          125             1530             350
-## 3 Advertisement: 3          200              105             600
-## # … with 2 more variables: impressions_per_dollar &lt;dbl&gt;,
-## #   clicks_per_dollar &lt;dbl&gt;</code></pre>
+advertisement_data$clicks_per_dollar</code></pre>
+<pre><code>## [1] 2.5 2.8 3.0</code></pre>
 <pre class="r"><code>constraint_5 = matrix(advertisement_data$clicks_per_dollar, ncol = 3)
 dir_5 = &quot;&gt;&quot;
 rhs_5 = 1350</code></pre>
