@@ -56,7 +56,7 @@ advertisement_data
 
 ### Objective Function:
 
-The key performance indicator is defined as: $\frac{i_n}{s_n}$ - impressions per dollar. The historical KPIs for each campaign are the coefficients of the objective function. 
+The key performance indicator is defined as: $\frac{i_n}{s_n}$, impressions per dollar. These are the coefficents of the objective function.
 
 ```{r}
 advertisement_data <-  
@@ -67,6 +67,8 @@ advertisement_data <-
 obj_func = advertisement_data$impressions_per_dollar
 obj_func
 ```
+
+Now that we have the objective function, let's work through the constraints. 
 
 ### Constraints:
 
@@ -118,13 +120,23 @@ dir_4 = "<="
 rhs_4 = 400
 ```
 
+Now that we've formulated the problem, let's solve it. 
+
 ## Solve
+
+Our constraint matrix looks like this:
 
 ```{r}
 A = rbind(constraint_1, constraint_2, constraint_3, constraint_4)
 dir = c(dir_1, dir_2, dir_3, dir_4)
 b = c(rhs_1, rhs_2, rhs_3, rhs_4)
 
+print(cbind(A, dir, b))
+```
+
+And the solution:
+
+```{r}
 solution = lp(direction = "max",
               objective.in = obj_func,
               const.mat = A,
@@ -134,7 +146,8 @@ solution = lp(direction = "max",
 solution$solution
 ```
 
-## Bonus 1
+
+## Bonus 1:
 
 **Constraint 5:**
 
@@ -158,7 +171,9 @@ dir_5 = ">"
 rhs_5 = 1350
 ```
 
-## New solution:
+**Solution:**
+
+Our overall constraint matrix looks like this:
 
 ```{r}
 A = rbind(constraint_1, constraint_2, constraint_3, constraint_4, constraint_5)
@@ -192,7 +207,7 @@ dir_6 = ">="
 rhs_6 = 0
 ```
 
-## New, new solution:
+**Solution:**
 
 ```{r}
 A = rbind(constraint_1, constraint_2, constraint_3, constraint_4, constraint_5, constraint_6)

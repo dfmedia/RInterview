@@ -235,7 +235,7 @@ advertisement_data</code></pre>
 ## 3 Advertisement: 3            200                  105             600</code></pre>
 <div id="objective-function" class="section level3">
 <h3>Objective Function:</h3>
-<p>The key performance indicator is defined as: <span class="math inline">\(\frac{i_n}{s_n}\)</span> - impressions per dollar. The historical KPIs for each campaign are the coefficients of the objective function.</p>
+<p>The key performance indicator is defined as: <span class="math inline">\(\frac{i_n}{s_n}\)</span>, impressions per dollar. These are the coefficents of the objective function.</p>
 <pre class="r"><code>advertisement_data &lt;-  
   advertisement_data %&gt;% mutate(
     impressions_per_dollar = impressions_obtained/amount_spent
@@ -244,6 +244,7 @@ advertisement_data</code></pre>
 obj_func = advertisement_data$impressions_per_dollar
 obj_func</code></pre>
 <pre><code>## [1] 10.000 12.240  0.525</code></pre>
+<p>Now that we have the objective function, let’s work through the constraints.</p>
 </div>
 <div id="constraints" class="section level3">
 <h3>Constraints:</h3>
@@ -271,14 +272,25 @@ rhs_3 = 0</code></pre>
 <pre class="r"><code>constraint_4 = matrix(c(0,1,1), ncol = 3)
 dir_4 = &quot;&lt;=&quot;
 rhs_4 = 400</code></pre>
+<p>Now that we’ve formulated the problem, let’s solve it.</p>
 </div>
 <div id="solve" class="section level2">
 <h2>Solve</h2>
+<p>Our constraint matrix looks like this:</p>
 <pre class="r"><code>A = rbind(constraint_1, constraint_2, constraint_3, constraint_4)
 dir = c(dir_1, dir_2, dir_3, dir_4)
 b = c(rhs_1, rhs_2, rhs_3, rhs_4)
 
-solution = lp(direction = &quot;max&quot;,
+print(cbind(A, dir, b))</code></pre>
+<pre><code>##                   dir  b    
+## [1,] &quot;1&quot; &quot;1&quot;  &quot;1&quot; &quot;=&quot;  &quot;500&quot;
+## [2,] &quot;1&quot; &quot;0&quot;  &quot;0&quot; &quot;&gt;=&quot; &quot;25&quot; 
+## [3,] &quot;0&quot; &quot;1&quot;  &quot;0&quot; &quot;&gt;=&quot; &quot;25&quot; 
+## [4,] &quot;0&quot; &quot;0&quot;  &quot;1&quot; &quot;&gt;=&quot; &quot;25&quot; 
+## [5,] &quot;1&quot; &quot;-1&quot; &quot;0&quot; &quot;&gt;=&quot; &quot;0&quot;  
+## [6,] &quot;0&quot; &quot;1&quot;  &quot;1&quot; &quot;&lt;=&quot; &quot;400&quot;</code></pre>
+<p>And the solution:</p>
+<pre class="r"><code>solution = lp(direction = &quot;max&quot;,
               objective.in = obj_func,
               const.mat = A,
               const.dir = dir,
@@ -288,7 +300,7 @@ solution$solution</code></pre>
 <pre><code>## [1] 237.5 237.5  25.0</code></pre>
 </div>
 <div id="bonus-1" class="section level2">
-<h2>Bonus 1</h2>
+<h2>Bonus 1:</h2>
 <p><strong>Constraint 5:</strong></p>
 <p>Expected clicks must be greater than 1350.</p>
 <ul>
@@ -305,9 +317,8 @@ advertisement_data$clicks_per_dollar</code></pre>
 <pre class="r"><code>constraint_5 = matrix(advertisement_data$clicks_per_dollar, ncol = 3)
 dir_5 = &quot;&gt;&quot;
 rhs_5 = 1350</code></pre>
-</div>
-<div id="new-solution" class="section level2">
-<h2>New solution:</h2>
+<p><strong>Solution:</strong></p>
+<p>Our overall constraint matrix looks like this:</p>
 <pre class="r"><code>A = rbind(constraint_1, constraint_2, constraint_3, constraint_4, constraint_5)
 dir = c(dir_1, dir_2, dir_3, dir_4, dir_5)
 b = c(rhs_1, rhs_2, rhs_3, rhs_4, rhs_5)
@@ -331,9 +342,7 @@ solution$solution</code></pre>
 <pre class="r"><code>constraint_6 = matrix(c(0,-.3,.7), ncol = 3)
 dir_6 = &quot;&gt;=&quot;
 rhs_6 = 0</code></pre>
-</div>
-<div id="new-new-solution" class="section level2">
-<h2>New, new solution:</h2>
+<p><strong>Solution:</strong></p>
 <pre class="r"><code>A = rbind(constraint_1, constraint_2, constraint_3, constraint_4, constraint_5, constraint_6)
 dir = c(dir_1, dir_2, dir_3, dir_4, dir_5, dir_6)
 b = c(rhs_1, rhs_2, rhs_3, rhs_4, rhs_5, rhs_6)
