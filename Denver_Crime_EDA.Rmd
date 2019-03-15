@@ -11,6 +11,8 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 ## Import the data & load packages
 
+**You'll need to use ggmap::register_google to enable Google Maps for geo-plotting. Get an API Key here:  https://cloud.google.com/maps-platform/ **
+
 ```{r}
 library(tidyverse)
 library(ggplot2)
@@ -23,7 +25,15 @@ df = read_csv(file='denver-crime-data/crime.csv.gz')
 
 ## Add some features
 
+Below we do some initial data cleaning and add some features. There are 104 cases where an offense is considered both a crime and traffic offense. The case when handles this issue when labeling.
+
 ```{r}
+df %>% 
+  select(IS_CRIME, IS_TRAFFIC, OFFENSE_CATEGORY_ID) %>% 
+  group_by_all %>% 
+  count %>% 
+  arrange(desc(n))
+
 df <- 
   df %>% mutate(
     day_of_week = wday(FIRST_OCCURRENCE_DATE, label = TRUE), 
@@ -41,6 +51,10 @@ df <-
         )
       
   )
+```
+Overall the dataset seems managable. There are about 201K observations.
+```{r}
+glimpse(df)
 ```
 
 ## Set some colors
@@ -69,7 +83,7 @@ dfm_color = "#39848D"
 
 ## Exploratory Data Analysis
 
-A good starting place is always a simple time-series plot of the data. 
+A good starting place is always a simple time-series plot of the data. This is a simple count of crime by day.
 
 ```{r}
 daily_count <- 
@@ -86,7 +100,7 @@ ggplot(data=daily_count, mapping=aes(x=date, y=n)) +
         plot.title = element_text(hjust = 0.5)) 
 ```
 
-Here we can see the dataset dates back to 2014, but isn't really populated until 2017. Day-level granularity is quite noisy.
+Here we can see the dataset dates back to 2014, but isn't really populated until 2017. Day-level granularity is quite noisy. Let's group by month/year to get a better handle of the trends.
 
 **Get rid of useless data, handle noisyness:**
 
@@ -140,7 +154,7 @@ ggplot(data=monthly_type_count, mapping=aes(x=month_year, y=n)) +
   scale_color_manual(values = col_vector)
 ```
 
-Traffic is stable across the entire year, but it's crime that spikes during the summer. Guess we need to give out more free ice cream. Let's drill down even further:
+Traffic is stable across the entire year, but it's crime that spikes during the summer. Guess we need to give out more free ice cream. There is nothing new here. We should expect traffic to remain stable. On first glance, we might be able to explain the spike during the summer months as free time for college/high shool students. Crime in general is typically attributed to younger males. Let's drill down even further:
 
 **Drilling down into offense categories::**
 
@@ -169,7 +183,7 @@ ggplot(data=monthly_offense_percentage, mapping=aes(x=month_year, y=percentage))
   scale_fill_manual(values=col_vector)
 ```
 
-The distribution of offense categories remains pretty consistent over time - no seasonality. 
+The chart above shows the proportion of all crimes at each month. The proportions of offense categories remains pretty consistent over time - no significant seasonality. For example, if there happened to be a large increase in robbery, the volume of space at that point in time in the plot would expand. Overall, this plot helps to give a sense of how common any particular crime is compared to others.
 
 Traffic & "all-other-crimes" make up just under half of all incidents. Murder and arson seem low - which is promising. Aggravated assault is as common, if not more common than "white collar crime".
 
@@ -198,13 +212,13 @@ ggplot(data=monthly_offense_count, mapping=aes(x=month, y=n)) +
 
 A couple of takeways: 
 
-* Burglary, auto theft, public disorder, and "other crimes against persons" all have much lower rates. 
+* Burglary, auto theft, public disorder, and "other crimes against persons" are on the decline from the previous year.
 
-* Motor-vehicle theft & aggravated assault are on the rise.  
+* Motor-vehicle theft & aggravated assault are on the rise from the previous year.
 
-* Everything else seems consistent with the prior year. 
+* Everything else seems relatively consistent with the prior year. 
 
-This makes me think about violent crime vs. non-violent crime. Let's say that violent crime consists of: aggravated assault, sexual assault, murder, and robbery. 
+This makes me think about violent crime vs. non-violent crime. Let's say that violent crime consists of: **aggravated assault, sexual assault, murder, and robbery.** 
 
 ```{r}
 df <- 
@@ -237,7 +251,9 @@ ggplot(data=monthly_violent_count, mapping=aes(x=month, y=n)) +
 
 Hmmm this looks discouraging - violent crimes appear to be much higher in 2018 than 2017. The only way to know "for sure" is to run a quick t-test. 
 
-To do this, we'll try to measure if the average daily incident rate was LOWER in 2017 than it was in 2018. Going back to day-level granularity gets us a larger sample size - better for testing. 
+This assumes that the data collection process remained consistent year over year. If there was, say, some "higher quality reporting" of violent crime in 2018, that might skew the data even though the general crime rate remained constant.
+
+To do this, we'll try to measure if the average daily incident rate was LOWER in 2017 than it was in 2018. Going back to day-level granularity gets us a larger sample size - better for testing. Let's start by making sure the distributions look appropriate (Gaussian) for testing.
 
 ```{r}
 statsig <- 
@@ -282,15 +298,17 @@ summary(statsig %>% filter(year==2017) %>% .$n)
 summary(statsig %>% filter(year==2018) %>% .$n)
 ```
 
-Let's run a one-tailed test to see if the daily violent incident rate in 2017 was lower than 2018. The function we're using assumes unequal variances.
+Since the distributions look good, let's run a one-tailed test to see if the daily violent incident rate in 2017 was lower than 2018. The function we're using assumes unequal variances.
 
 ```{r}
 print(t.test(n ~ year, data = statsig, alternative="less"))
 ```
 
-P-value of less than 1% means that we accept our alternative hypothesis. We're 95% confident that the true difference in means is somewhere between negative infinity and -.28. How encouraging. 
+P-value of less than 1% means that we accept our alternative hypothesis. 
 
-What if we used log(n)?
+We're 95% confident that the true difference in means is somewhere between $-\infty$ and -.28. How encouraging. 
+
+What if we transformed the data by $log(n)$?
 
 ```{r}
 print(t.test(log(n) ~ year, data = statsig, alternative="less"))
@@ -420,6 +438,7 @@ Personally, my favorite is District 1. The lowest in murder (besides District 7,
 **Let's look more closely at the geo-density of these crimes:**
 
 ```{r fig.height=8, fig.width=12}
+
 map = get_map(location = "Denver, CO",
               source = "google",
               maptype = "terrain",
