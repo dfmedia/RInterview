@@ -263,7 +263,7 @@ statsig <-
 
 ggplot(statsig, aes(n)) +
   labs(title = "Distribution of Daily Violent Incidents",
-       x = "# of Incidents") + 
+       x = "# of Incidents per Day") + 
   geom_histogram(fill = dfm_color, color = "grey30") + 
   theme_bw() +
   facet_wrap(~ year)
@@ -274,7 +274,7 @@ The distributions look pretty similar & normal (save for the outlier in 2017) - 
 ```{r}
 ggplot(statsig, aes(n)) +
   labs(title = "Density of Daily Violent Incidents",
-       x = "# of Incidents") + 
+       x = "# of Incidents per Day") + 
   geom_density(fill = dfm_color, color = "grey30") + 
   theme_bw() +
   facet_wrap(~ year)
@@ -284,8 +284,8 @@ Yep, this looks good. Let's look at a box plot just for the hell of it.
 
 ```{r}
 ggplot(statsig, aes(x=as.factor(year), y=n)) +
-  labs(title = "Density of Daily Violent Incidents",
-       x = "# of Incidents") + 
+  labs(title = "Box Plot of Daily Violent Incidents",
+       x = "# of Incidents per Day") + 
   geom_boxplot(fill = dfm_color, color = "grey30") + 
   theme_bw()
 ```
@@ -431,7 +431,9 @@ Takeways:
 
 * District 6 alone is responsible for just under half of all drug/alcohol related incidents, which makes sense because it's downtown. 
 
-* District 3 leads in white collar crime, traffic, and  motor-vehicle theft. 
+* District 3 leads in white collar crime, traffic, motor-vehicle theft, auto-theft, and burglary. Wow.
+
+* District 2 leads in murder.
 
 Personally, my favorite is District 1. The lowest in murder (besides District 7, the airport, which doesn't count), and normal in everything else. 
 
