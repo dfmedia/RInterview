@@ -1,0 +1,479 @@
+---
+title: "Denver Crime Data - EDA"
+author: "Lucas Stephens"
+date: "3/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+## Import the data & load packages
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggmap)
+library(lubridate)
+
+df = read_csv(file='denver-crime-data/crime.csv.gz')
+```
+
+
+## Add some features
+
+```{r}
+df <- 
+  df %>% mutate(
+    day_of_week = wday(FIRST_OCCURRENCE_DATE, label = TRUE), 
+    month = month(FIRST_OCCURRENCE_DATE, label = TRUE),
+    date = date(FIRST_OCCURRENCE_DATE), 
+    week = week(FIRST_OCCURRENCE_DATE),
+    year = year(FIRST_OCCURRENCE_DATE), 
+    minute = minute(FIRST_OCCURRENCE_DATE), 
+    am = am(FIRST_OCCURRENCE_DATE),
+    hour = hour(FIRST_OCCURRENCE_DATE),
+    type = case_when(
+            IS_CRIME == 1 & IS_TRAFFIC == 0 ~ "Crime",
+            IS_CRIME == 0 & IS_TRAFFIC == 1 ~ "Traffic",
+            TRUE ~ "Both"
+        )
+      
+  )
+```
+
+## Set some colors
+
+```{r}
+col_vector<-c('#e6194b', 
+              '#3cb44b', 
+              '#ffe119', 
+              '#4363d8', 
+              '#f58231', 
+              '#911eb4', 
+              '#46f0f0', 
+              '#f032e6', 
+              '#bcf60c', 
+              '#fabebe', 
+              '#008080', 
+              '#800000', 
+              '#aaffc3', 
+              '#ffd8b1', 
+              '#000075', 
+              '#808080', 
+              '#000000')
+
+dfm_color = "#39848D"
+```
+
+## Exploratory Data Analysis
+
+A good starting place is always a simple time-series plot of the data. 
+
+```{r}
+daily_count <- 
+  df %>% count(date)
+
+ggplot(data=daily_count, mapping=aes(x=date, y=n)) + 
+  geom_line(color = dfm_color) + 
+  theme_bw() + 
+  labs(title = "Number of Incidents per Day",
+       x = element_blank(),
+       y = element_blank()) + 
+  scale_x_date(date_breaks = "year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) 
+```
+
+Here we can see the dataset dates back to 2014, but isn't really populated until 2017. Day-level granularity is quite noisy.
+
+**Get rid of useless data, handle noisyness:**
+
+```{r}
+df <- 
+  df %>% 
+  filter(FIRST_OCCURRENCE_DATE >= date("2017-01-01") & FIRST_OCCURRENCE_DATE < date("2019-02-01"))
+
+monthly_count <- 
+  df %>% 
+  mutate(
+    month_year = date(paste0(year(date), "-", month(date, label =  FALSE), "-", "01"))
+  ) %>% 
+  count(month_year)
+
+ggplot(data=monthly_count, mapping=aes(x=month_year, y=n)) + 
+  geom_line(color = dfm_color,
+            size = 1) + 
+  theme_bw() + 
+  labs(title = "Number of Incidents per Month",
+       x = element_blank(),
+       y = element_blank()) + 
+  scale_x_date(date_breaks = "year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) 
+```
+
+Incidents skyrocket during the summer months, but the overall trend seems stable. 
+
+**Drilling down into incident type:**
+
+```{r}
+monthly_type_count <- 
+  df %>% 
+  mutate(
+    month_year = date(paste0(year(date), "-", month(date, label =  FALSE), "-", "01"))
+  ) %>% 
+  count(month_year, type)
+
+ggplot(data=monthly_type_count, mapping=aes(x=month_year, y=n)) + 
+  geom_line(mapping=aes(color=type), 
+            size=1) + 
+  theme_bw() + 
+  labs(title = "Number of Incidents per Month",
+       x = element_blank(),
+       y = element_blank(),
+       color = "Type") + 
+  scale_x_date(date_breaks = "year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) +
+  scale_color_manual(values = col_vector)
+```
+
+Traffic is stable across the entire year, but it's crime that spikes during the summer. Guess we need to give out more free ice cream. Let's drill down even further:
+
+**Drilling down into offense categories::**
+
+```{r}
+monthly_offense_percentage <- 
+  df %>% 
+  mutate(
+    month_year = date(paste0(year, "-", month(date, label =  FALSE), "-", "01"))
+  ) %>% 
+  count(month_year, OFFENSE_CATEGORY_ID) %>% 
+  group_by(month_year) %>% 
+  mutate(
+    percentage = n/sum(n)
+  ) %>% 
+  ungroup()
+
+ggplot(data=monthly_offense_percentage, mapping=aes(x=month_year, y=percentage)) +
+  geom_area(mapping=aes(fill=OFFENSE_CATEGORY_ID)) +
+  theme_bw() + 
+  labs(title = "Incident Distribution per Month",
+       x = element_blank(),
+       y = element_blank(),
+       fill = "Offense Category") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_fill_manual(values=col_vector)
+```
+
+The distribution of offense categories remains pretty consistent over time - no seasonality. 
+
+Traffic & "all-other-crimes" make up just under half of all incidents. Murder and arson seem low - which is promising. Aggravated assault is as common, if not more common than "white collar crime".
+
+**How are things trending compared to last year?**
+
+```{r fig.height=8, fig.width=12}
+monthly_offense_count <- 
+  df %>% 
+  count(month, year, OFFENSE_CATEGORY_ID)
+
+ggplot(data=monthly_offense_count, mapping=aes(x=month, y=n)) +
+  geom_line(mapping=aes(color=as.character(year), 
+            group=as.character(year)),
+            size=.5) + 
+  theme_bw() + 
+  labs(title = "Year over Year Incident Comparison",
+       x = element_blank(),
+       y = "# Incidents",
+       color = "Year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_color_manual(values = col_vector) + 
+  facet_wrap(~ OFFENSE_CATEGORY_ID, scales = "free_y") +
+  scale_x_discrete(breaks = c("Jan", "Mar", "May", "Jul", "Sep", "Nov"))
+```
+
+A couple of takeways: 
+
+* Burglary, auto theft, public disorder, and "other crimes against persons" all have much lower rates. 
+
+* Motor-vehicle theft & aggravated assault are on the rise.  
+
+* Everything else seems consistent with the prior year. 
+
+This makes me think about violent crime vs. non-violent crime. Let's say that violent crime consists of: aggravated assault, sexual assault, murder, and robbery. 
+
+```{r}
+df <- 
+  df %>% 
+  mutate(
+    is_violent = case_when(
+                    OFFENSE_CATEGORY_ID %in% c("murder", "aggravated-assault", "sexual-assault", "robbery") ~ "violent",
+                    TRUE ~ "non-violent")
+  )
+
+monthly_violent_count <- 
+  df %>% 
+  count(month, year, is_violent)
+
+ggplot(data=monthly_violent_count, mapping=aes(x=month, y=n)) +
+  geom_line(mapping=aes(color=as.character(year), 
+            group=as.character(year)),
+            size=.5) + 
+  theme_bw() + 
+  labs(title = "Violent/Non-violent Incident Comparison",
+       x = element_blank(),
+       y = "# Incidents",
+       color = "Year") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_color_manual(values = col_vector) + 
+  facet_wrap(~ is_violent, scales = "free_y") +
+  scale_x_discrete(breaks = c("Jan", "Mar", "May", "Jul", "Sep", "Nov"))
+```
+
+Hmmm this looks discouraging - violent crimes appear to be much higher in 2018 than 2017. The only way to know "for sure" is to run a quick t-test. 
+
+To do this, we'll try to measure if the average daily incident rate was LOWER in 2017 than it was in 2018. Going back to day-level granularity gets us a larger sample size - better for testing. 
+
+```{r}
+statsig <- 
+  df %>% 
+  filter(is_violent == "violent" & year != 2019) %>% 
+  count(year, date)
+
+ggplot(statsig, aes(n)) +
+  labs(title = "Distribution of Daily Violent Incidents",
+       x = "# of Incidents") + 
+  geom_histogram(fill = dfm_color, color = "grey30") + 
+  theme_bw() +
+  facet_wrap(~ year)
+```
+
+The distributions look pretty similar & normal (save for the outlier in 2017) - let's look at a density plot. 
+
+```{r}
+ggplot(statsig, aes(n)) +
+  labs(title = "Density of Daily Violent Incidents",
+       x = "# of Incidents") + 
+  geom_density(fill = dfm_color, color = "grey30") + 
+  theme_bw() +
+  facet_wrap(~ year)
+```
+
+Yep, this looks good. Let's look at a box plot just for the hell of it. 
+
+```{r}
+ggplot(statsig, aes(x=as.factor(year), y=n)) +
+  labs(title = "Density of Daily Violent Incidents",
+       x = "# of Incidents") + 
+  geom_boxplot(fill = dfm_color, color = "grey30") + 
+  theme_bw()
+```
+
+Same story. Though I suppose we should see that actual summary statistics themselves. 
+
+```{r}
+summary(statsig %>% filter(year==2017) %>% .$n)
+
+summary(statsig %>% filter(year==2018) %>% .$n)
+```
+
+Let's run a one-tailed test to see if the daily violent incident rate in 2017 was lower than 2018. The function we're using assumes unequal variances.
+
+```{r}
+print(t.test(n ~ year, data = statsig, alternative="less"))
+```
+
+P-value of less than 1% means that we accept our alternative hypothesis. We're 95% confident that the true difference in means is somewhere between negative infinity and -.28. How encouraging. 
+
+What if we used log(n)?
+
+```{r}
+print(t.test(log(n) ~ year, data = statsig, alternative="less"))
+```
+
+Even more convincing. Violent crime is definitely higher in 2018. 
+
+**When do these things happen?**
+
+Unfortunately, the timestamps in this dataset don't have an AM/PM distinction, so it's impossible to get to time-of-day granularity. But we still can look at days of the week. 
+
+```{r}
+day_of_week_count <- 
+  df %>% 
+  count(day_of_week)
+
+ggplot(data=day_of_week_count, mapping=aes(x=day_of_week, y=n)) +
+  geom_bar(fill=dfm_color,
+           stat = "identity") +
+  theme_bw() + 
+  labs(title = "Day-of-week Incident Comparison",
+       x = element_blank(),
+       y = element_blank()) + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) 
+```
+
+Most incidents occur during the weekdays, with Friday being the highest. 
+
+Breaking this out by offense category:
+
+```{r fig.height=8, fig.width=12}
+day_of_week_offense_count <- 
+  df %>% 
+  count(day_of_week, OFFENSE_CATEGORY_ID)
+
+ggplot(data=day_of_week_offense_count, mapping=aes(x=day_of_week, y=as.numeric(n))) + 
+  geom_bar(fill=dfm_color, 
+           stat="identity") + 
+  theme_bw() + 
+  labs(title = "Day-of-week Incident Comparison",
+       x = element_blank(),
+       y = "# of Incidents") + 
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  facet_wrap(~ OFFENSE_CATEGORY_ID, scales = "free") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+A couple of takeways: 
+
+* Aggravated assault, sexual assault, and "other crimes against persons" all tend to peak on the weekend. 
+
+* Arsonists light things on fire on Tuesday. 
+
+* And traffic accidents & white collar crime peak during the week. 
+
+But oddly enough, so do drug/alcohol incidents. Especially on Wednesday. You'd think these incidents would happen more on the weekend.
+
+**Where do these things happen?**
+
+Let's start with, where are each of the districts?
+
+```{r fig.height=8, fig.width=12}
+map = get_map(location = "Denver, CO",
+              source = "google",
+              maptype = "terrain",
+              crop = TRUE, 
+              zoom = 10)
+
+ggmap(map) +
+  labs(title = "District Locations",
+       x = element_blank(),
+       y = element_blank(),
+       color = "District ID"
+  ) +
+  theme_bw() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  geom_point(data=df, mapping=aes(x=GEO_LON, y=GEO_LAT, color=as.factor(DISTRICT_ID))) + 
+  scale_color_manual(values = col_vector)
+```
+
+And a heatmap of offense category vs district:
+
+The data needs normalization so we don't overindex on the most common crimes. A simple proportion should do. 
+
+```{r fig.height=6, fig.width=10}
+heatmap <- 
+  df %>% 
+  count(DISTRICT_ID, OFFENSE_CATEGORY_ID) %>% 
+  group_by(OFFENSE_CATEGORY_ID) %>% 
+  mutate(
+    normalized_count = n/sum(n)
+  ) %>% 
+  ungroup()
+
+col1 = "#d8e1cf" 
+
+ggplot(data=heatmap, mapping=aes(x=DISTRICT_ID, y=OFFENSE_CATEGORY_ID)) +
+  geom_tile(aes(fill=normalized_count)) +
+  labs(title = "Offense Category vs District",
+       x = element_blank(),
+       y = element_blank(),
+       fill = "% of Offense Category"
+  ) +
+  scale_fill_gradient(low = col1, high = dfm_color) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  scale_x_continuous(breaks = unique(heatmap$DISTRICT_ID)) 
+```
+
+Takeways:
+
+* District 6 alone is responsible for just under half of all drug/alcohol related incidents, which makes sense because it's downtown. 
+
+* District 3 leads in white collar crime, traffic, and  motor-vehicle theft. 
+
+Personally, my favorite is District 1. The lowest in murder (besides District 7, the airport, which doesn't count), and normal in everything else. 
+
+**Let's look more closely at the geo-density of these crimes:**
+
+```{r fig.height=8, fig.width=12}
+map = get_map(location = "Denver, CO",
+              source = "google",
+              maptype = "terrain",
+              crop = TRUE, 
+              zoom = 11)
+
+ggmap(map) +
+  labs(title = "Heat Map of Offenses",
+       x = element_blank(),
+       y = element_blank(),
+       fill = "Number of Incidents"
+  ) +
+  theme_bw() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  stat_density2d(data=df, 
+                 mapping=aes(x=GEO_LON, 
+                             y=GEO_LAT, 
+                             fill = ..level..), 
+                 geom = "polygon") +
+  scale_fill_gradient(low="green", 
+                      high="red")
+```
+
+Everything happens downtown - unsurprising. 
+
+What about by category?
+
+```{r fig.height=8, fig.width=12}
+ggmap(map) +
+  labs(title = "Heat Map of Offenses",
+       x = element_blank(),
+       y = element_blank(),
+       fill = "Density"
+  ) +
+  theme_bw() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5)) + 
+  stat_density2d(data=df, 
+                 mapping=aes(x=GEO_LON, 
+                             y=GEO_LAT, 
+                             fill = stat(nlevel)), 
+                 geom = "polygon") +
+  scale_fill_gradient(low="green", 
+                      high="red") +
+  facet_wrap(~ OFFENSE_CATEGORY_ID)
+```
+
+Auto-theft & burglary seem to have small pockets of density outside of downtown. Arson looks alarming, but that's just the low sample size. 
+
+## Conclusion
+
+Overall, I come away from this EDA thinking that Denver is a pretty safe city. Traffic makes up most of the incidents, crime spikes in the summer as the urban legend goes, and the overall incident count seems to be stable. The violent crimes (murder, aggravated assault, sexual assault) seem low in proportion to other offense types. The only thing that makes me uneasy is that violent crimes are definitely growing. 
